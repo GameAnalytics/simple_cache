@@ -15,104 +15,74 @@
          flush/1, flush/2,
          sync_flush/1]).
 
--define(PREFIX, "simple_cache_").
-
 %%%=============================================================================
 %%% API
 %%%=============================================================================
 
 -spec new(cache_name()) -> ok.
 new(Name) ->
-    ok = simple_cache_sup:start_server(init_name(Name)).
+    ok = simple_cache_sup:start_server(Name).
 
 -spec delete(cache_name()) -> ok.
 delete(Name) ->
-    ok = simple_cache_sup:stop_server(name(Name)).
+    ok = simple_cache_sup:stop_server(Name).
 
 -spec list() -> [cache_name()].
 list() ->
-    lists:map(fun (ServerName) ->
-                      erlang:list_to_existing_atom(erlang:atom_to_list(ServerName) -- ?PREFIX)
-              end, simple_cache_sup:servers()).
+    simple_cache_sup:servers().
 
 -spec ops_info(cache_name()) -> list().
 ops_info(Name) ->
-    call(ops_info, Name).
+    simple_cache_server:ops_info(Name).
 
 -spec ops_list(cache_name()) -> list().
 ops_list(Name) ->
-    call(ops_list, Name).
+    simple_cache_server:ops_list(Name).
 
 -spec set(cache_name(), any(), any()) -> ok.
 set(Name, Key, Value) ->
-    call(set, Name, [Key, Value]).
+    simple_cache_server:set(Name, Key, Value).
 
 -spec sync_set(cache_name(), any(), any()) -> any().
 sync_set(Name, Key, Value) ->
-    call(sync_set, Name, [Key, Value]).
+    simple_cache_server:sync_set(Name, Key, Value).
 
 -spec set(cache_name(), any(), any(), expire()) -> ok | {error, invalid_expire, any()}.
 set(Name, Key, _Value, 0) ->
-    call(flush, Name, [Key]);
+    simple_cache_server:flush(Name, Key);
 set(Name, Key, Value, Expires) when is_number(Expires) ->
-    call(set, Name, [Key, Value, Expires]);
+    simple_cache_server:set(Name, Key, Value, Expires);
 set(_Name, _Key, _Value, Expires) ->
     {error, invalid_expire, Expires}.
 
 -spec sync_set(cache_name(), any(), any(), expire()) -> any().
 sync_set(Name, Key, _Value, 0) ->
-    call(sync_flush, Name, [Key]);
+    simple_cache_server:sync_flush(Name, Key);
 sync_set(Name, Key, Value, Expires) when is_number(Expires) ->
-    call(sync_set, Name, [Key, Value, Expires]);
+    simple_cache_server:sync_set(Name, Key, Value, Expires);
 sync_set(_Name, _Key, _Value, Expires) ->
     {error, invalid_expire, Expires}.
 
 -spec cond_set(cache_name(), any(), any(), conditional(), expire()) -> any().
 cond_set(Name, Key, Value, Conditional, Expires) when Expires > 0 ->
-    call(cond_set, Name, [Key, Value, Conditional, Expires]).
+    simple_cache_server:cond_set(Name, Key, Value, Conditional, Expires).
 
 -spec lookup(cache_name(), any()) -> {error,not_found} | {ok, any()}.
 lookup(Name, Key) ->
-    call(lookup, Name, [Key]).
+    simple_cache_server:lookup(Name, Key).
 
 -spec lookup(cache_name(), any(), any()) -> {ok,_}.
 lookup(Name, Key, Default) ->
-    call(lookup, Name, [Key, Default]).
+    simple_cache_server:lookup(Name, Key, Default).
 
 -spec flush(cache_name(), any()) -> ok.
 flush(Name, Key) ->
-    call(flush, Name, [Key]).
+    simple_cache_server:flush(Name, Key).
 
 -spec flush(cache_name()) -> ok.
 flush(Name) ->
-    call(flush, Name).
+    simple_cache_server:flush(Name).
 
 -spec sync_flush(cache_name()) -> ok.
 sync_flush(Name) ->
-    call(sync_flush, Name).
-
-%%%=============================================================================
-%%% Internal functions
-%%%=============================================================================
-
-init_name(Name) when is_atom(Name) ->
-    erlang:list_to_atom(?PREFIX ++ erlang:atom_to_list(Name)).
-
-name(Name) when is_atom(Name) ->
-    try
-        erlang:list_to_existing_atom(?PREFIX ++ erlang:atom_to_list(Name))
-    catch
-        error:badarg ->
-            {error, cache_not_found}
-    end.
-
-call(Function, Name) ->
-    call(Function, Name, []).
-
-call(Function, Name, Args) ->
-    case name(Name) of
-        {error, cache_not_found} ->
-            {error, cache_not_found};
-        ServerName ->
-            erlang:apply(simple_cache_server, Function, [ServerName | Args])
-    end.
+    simple_cache_server:sync_flush(Name).
