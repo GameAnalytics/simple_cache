@@ -20,9 +20,11 @@
          set/3, set/4,
          sync_set/4,
          cond_set/5,
-         lookup/2, lookup/3,
-         flush/1, flush/2,
-         sync_flush/1, sync_flush/2]).
+         get/2, get/3,
+         clear/2,
+         sync_clear/2,
+         clear_all/1,
+         sync_clear_all/1]).
 
 %%=============================================================================
 %% gen_server Function Exports
@@ -66,30 +68,29 @@ sync_set(Name, Key, Value, Expires) ->
 cond_set(Name, Key, Value, Conditional, Expires) ->
     gen_server:call(Name, {set, Key, Value, Conditional, Expires}).
 
--spec lookup(cache_name(), any()) -> {error, not_found} | {ok, any()}.
-lookup(Name, Key) -> get_by_key(Name, Key, undefined).
+-spec get(cache_name(), any()) -> {error, not_found} | {ok, any()}.
+get(Name, Key) -> get_by_key(Name, Key, undefined).
 
--spec lookup(cache_name(), any(), any()) -> {ok,_}.
-lookup(Name, Key, Default) -> get_by_key(Name, Key, Default).
+-spec get(cache_name(), any(), any()) -> {ok,_}.
+get(Name, Key, Default) -> get_by_key(Name, Key, Default).
 
--spec flush(cache_name(), any()) -> ok.
-flush(Name, Key) ->
-    gen_server:cast(Name, {flush, Key}),
+-spec clear(cache_name(), any()) -> ok.
+clear(Name, Key) ->
+    gen_server:cast(Name, {clear, Key}),
     ok.
 
--spec sync_flush(cache_name(), any()) -> ok.
-sync_flush(Name, Key) ->
-    gen_server:call(Name, {flush, Key}),
+-spec sync_clear(cache_name(), any()) -> ok.
+sync_clear(Name, Key) ->
+    gen_server:call(Name, {sync_clear, Key}).
+
+-spec clear_all(cache_name()) -> ok.
+clear_all(Name) ->
+    gen_server:cast(Name, clear_all),
     ok.
 
--spec flush(cache_name()) -> ok.
-flush(Name) ->
-    gen_server:cast(Name, flush),
-    ok.
-
--spec sync_flush(cache_name()) -> ok.
-sync_flush(Name) ->
-    gen_server:call(Name, flush).
+-spec sync_clear_all(cache_name()) -> ok.
+sync_clear_all(Name) ->
+    gen_server:call(Name, sync_clear_all).
 
 %%=============================================================================
 %% gen_server Function Definitions
@@ -107,16 +108,16 @@ handle_call({set, Key, Value, Expires}, _From, #state{table = Table} = State) ->
     _Ref = insert(Table, Key, Value, Expires),
     {reply, ok, State};
 handle_call({set, Key, Value, Conditional, Expires}, _From, #state{table = Table} = State) ->
-    Test = case lookup(Table, Key) of
+    Test = case ?MODULE:get(Table, Key) of
                {ok, OldValue}     -> Conditional(OldValue);
                {error, not_found} -> true
            end,
     Test andalso insert(Table, Key, Value, Expires),
     {reply, {ok, Test}, State};
-handle_call({flush, Key}, _From, #state{table = Table} = State) ->
+handle_call({sync_clear, Key}, _From, #state{table = Table} = State) ->
     ets:delete(Table, Key),
     {reply, ok, State};
-handle_call(flush, _From, #state{table = Table} = State) ->
+handle_call(sync_clear_all, _From, #state{table = Table} = State) ->
     true = ets:delete_all_objects(Table),
     {reply, ok, State}.
 
@@ -126,10 +127,10 @@ handle_cast({set, Key, Value, infinity}, #state{table = Table} = State) ->
 handle_cast({set, Key, Value, Expires}, #state{table = Table} = State) ->
     _Ref = insert(Table, Key, Value, Expires),
     {noreply, State};
-handle_cast({flush, Key}, #state{table = Table} = State) ->
+handle_cast({clear, Key}, #state{table = Table} = State) ->
     ets:delete(Table, Key),
     {noreply, State};
-handle_cast(flush, #state{table = Table} = State) ->
+handle_cast(clear_all, #state{table = Table} = State) ->
     ets:delete_all_objects(Table),
     {noreply, State}.
 
