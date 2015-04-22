@@ -1,92 +1,155 @@
 -module(simple_cache).
 
+-include("simple_cache.hrl").
+
 %% API
--export([ops_info/0,
-         ops_list/0,
+-export([new/1,
+         delete/1,
+         list/0]).
 
-         set/2,
-         sync_set/2,
-         set/3,
-         sync_set/3,
-         cond_set/4,
-         lookup/1,
-         lookup/2,
-         flush/1,
-         flush/0,
-         sync_flush/0,
+-export([ops_info/0, ops_info/1,
+         ops_list/0, ops_list/1,
+         set/2, set/3,
+         sync_set/2, sync_set/3,
+         setex/3, setex/4,
+         sync_setex/3, sync_setex/4,
+         cond_set/4, cond_set/5,
+         get/1, get/2,
+         get_def/2, get_def/3,
+         clear/1, clear/2,
+         sync_clear/1, sync_clear/2,
+         clear_all/0, clear_all/1,
+         sync_clear_all/0, sync_clear_all/1]).
 
-         start/0,
-         stop/0
-        ]).
-
--type expire() :: infinity | non_neg_integer().
--type conditional() :: fun((any()) -> boolean()).
-
--export_type([expire/0, conditional/0]).
+-export_type([expire/0,
+              conditional/0,
+              cache_name/0]).
 
 %%%=============================================================================
 %%% API
 %%%=============================================================================
+
+-spec new(cache_name()) -> ok.
+new(Name) ->
+    ok = simple_cache_sup:start_server(Name).
+
+-spec delete(cache_name()) -> ok.
+delete(Name) ->
+    ok = simple_cache_sup:stop_server(Name).
+
+-spec list() -> [cache_name()].
+list() ->
+    simple_cache_sup:servers().
+
 -spec ops_info() -> list().
 ops_info() ->
-    simple_cache_server:ops_info().
+    ops_info(?DEFAULT_CACHE).
+
+-spec ops_info(cache_name()) -> list().
+ops_info(Name) ->
+    simple_cache_server:ops_info(Name).
 
 -spec ops_list() -> list().
 ops_list() ->
-    simple_cache_server:ops_list().
+    ops_list(?DEFAULT_CACHE).
 
--spec set(any(), any()) -> 'ok'.
+-spec ops_list(cache_name()) -> list().
+ops_list(Name) ->
+    simple_cache_server:ops_list(Name).
+
+-spec set(any(), any()) -> ok.
 set(Key, Value) ->
-    simple_cache_server:set(Key, Value).
+    set(?DEFAULT_CACHE, Key, Value).
+
+-spec set(cache_name(), any(), any()) -> ok.
+set(Name, Key, Value) ->
+    simple_cache_server:set(Name, Key, Value).
 
 -spec sync_set(any(), any()) -> any().
 sync_set(Key, Value) ->
-    simple_cache_server:sync_set(Key, Value).
+    sync_set(?DEFAULT_CACHE, Key, Value).
 
--spec set(any(), any(), expire()) -> 'ok' | {'error','invalid_expire', any()}.
-set(Key, _Value, 0) ->
-    simple_cache_server:flush(Key);
-set(Key, Value, Expires) when is_number(Expires) ->
-    simple_cache_server:set(Key, Value, Expires);
-set(_Key, _Value, Expires) ->
+-spec sync_set(cache_name(), any(), any()) -> any().
+sync_set(Name, Key, Value) ->
+    simple_cache_server:sync_set(Name, Key, Value).
+
+
+-spec setex(any(), any(), expire()) -> ok | {error, invalid_expire, any()}.
+setex(Key, Value, Expires) ->
+    setex(?DEFAULT_CACHE, Key, Value, Expires).
+
+-spec setex(cache_name(), any(), any(), expire()) -> ok | {error, invalid_expire, any()}.
+setex(Name, Key, _Value, 0) ->
+    simple_cache_server:clear(Name, Key);
+setex(Name, Key, Value, Expires) when is_number(Expires) ->
+    simple_cache_server:set(Name, Key, Value, Expires);
+setex(_Name, _Key, _Value, Expires) ->
     {error, invalid_expire, Expires}.
 
--spec sync_set(any(), any(), expire()) -> any().
-sync_set(Key, _Value, 0) ->
-    simple_cache_server:sync_flush(Key);
-sync_set(Key, Value, Expires) when is_number(Expires) ->
-    simple_cache_server:sync_set(Key, Value, Expires);
-sync_set(_Key, _Value, Expires) ->
+-spec sync_setex(any(), any(), expire()) -> any().
+sync_setex(Key, Value, Expires) ->
+    sync_setex(?DEFAULT_CACHE, Key, Value, Expires).
+
+-spec sync_setex(cache_name(), any(), any(), expire()) -> any().
+sync_setex(Name, Key, _Value, 0) ->
+    simple_cache_server:sync_clear(Name, Key);
+sync_setex(Name, Key, Value, Expires) when is_number(Expires) ->
+    simple_cache_server:sync_set(Name, Key, Value, Expires);
+sync_setex(_Name, _Key, _Value, Expires) ->
     {error, invalid_expire, Expires}.
 
 -spec cond_set(any(), any(), conditional(), expire()) -> any().
-cond_set(Key, Value, Conditional, Expires) when Expires > 0 ->
-    simple_cache_server:cond_set(Key, Value, Conditional, Expires).
+cond_set(Key, Value, Conditional, Expires) ->
+    cond_set(?DEFAULT_CACHE, Key, Value, Conditional, Expires).
 
--spec lookup(any()) -> {'error','not_found'} | {'ok', any()}.
-lookup(Key) ->
-    simple_cache_server:lookup(Key).
+-spec cond_set(cache_name(), any(), any(), conditional(), expire()) -> any().
+cond_set(Name, Key, Value, Conditional, Expires) when Expires > 0 ->
+    simple_cache_server:cond_set(Name, Key, Value, Conditional, Expires).
 
--spec lookup(any(), any()) -> {'ok',_}.
-lookup(Key, Default) ->
-    simple_cache_server:lookup(Key, Default).
+-spec get(any()) -> {error, not_found} | {ok, any()}.
+get(Key) ->
+    get(?DEFAULT_CACHE, Key).
 
--spec flush(any()) -> 'ok'.
-flush(Key) ->
-    simple_cache_server:flush(Key).
+-spec get(cache_name(), any()) -> {error, not_found} | {ok, any()}.
+get(Name, Key) ->
+    simple_cache_server:get(Name, Key).
 
--spec flush() -> 'ok'.
-flush() ->
-    simple_cache_server:flush().
+-spec get_def(any(), any()) -> {ok, _}.
+get_def(Key, Default) ->
+    get_def(?DEFAULT_CACHE, Key, Default).
 
--spec sync_flush() -> 'ok'.
-sync_flush() ->
-    simple_cache_server:sync_flush().
+-spec get_def(cache_name(), any(), any()) -> {ok, _}.
+get_def(Name, Key, Default) ->
+    simple_cache_server:get(Name, Key, Default).
 
--spec start() -> 'ok' | {'error', term()}.
-start() ->
-    application:start(simple_cache).
+-spec clear(any()) -> ok.
+clear(Key) ->
+    clear(?DEFAULT_CACHE, Key).
 
--spec stop() -> 'ok' | {'error', term()}.
-stop() ->
-    application:stop(simple_cache).
+-spec clear(cache_name(), any()) -> ok.
+clear(Name, Key) ->
+    simple_cache_server:clear(Name, Key).
+
+-spec sync_clear(any()) -> ok.
+sync_clear(Key) ->
+    sync_clear(?DEFAULT_CACHE, Key).
+
+-spec sync_clear(cache_name(), any()) -> ok.
+sync_clear(Name, Key) ->
+    simple_cache_server:sync_clear(Name, Key).
+
+-spec clear_all() -> ok.
+clear_all() ->
+    clear_all(?DEFAULT_CACHE).
+
+-spec clear_all(cache_name()) -> ok.
+clear_all(Name) ->
+    simple_cache_server:clear_all(Name).
+
+-spec sync_clear_all() -> ok.
+sync_clear_all() ->
+    sync_clear_all(?DEFAULT_CACHE).
+
+-spec sync_clear_all(cache_name()) -> ok.
+sync_clear_all(Name) ->
+    simple_cache_server:sync_clear_all(Name).
